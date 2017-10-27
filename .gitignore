@@ -1,0 +1,8 @@
+/bin/
+/.vscode/
+/obj/
+/new-chapters/
+*.bak
+*.zip
+*.epub
+**/.DS_Store
