@@ -69,13 +69,16 @@ namespace MeaningnessScraper {
             // see http://www.hxa.name/articles/content/epub-guide_hxa7241_2007.html for details
 
             string calibreTocFile = Path.Combine(chapterFilesPath, "toc.ncx");
-            using (XmlWriter writer = XmlWriter.Create(File.OpenWrite(calibreTocFile), writerSettings)) {
+            using (FileStream fileStream = File.OpenWrite(calibreTocFile))
+            using (XmlWriter writer = XmlWriter.Create(fileStream, writerSettings)) {
                 WriteCalibreNcxFile(chapters, tocFile, writer);
             }
 
             string calibreOpfFile = Path.Combine(chapterFilesPath, "content.opf");
-            using (XmlWriter writer = XmlWriter.Create(File.OpenWrite(calibreOpfFile), writerSettings)) {
+            using (FileStream fileStream = File.OpenWrite(calibreOpfFile))
+            using (XmlWriter writer = XmlWriter.Create(fileStream, writerSettings)) {
                 WriteCalibreOpfFile(chapters, tocFile, writer);
+                writer.Close();
             }
 
             string calibreMimetypeFile = Path.Combine(chapterFilesPath, "mimetype");
@@ -85,22 +88,23 @@ namespace MeaningnessScraper {
             string metaInfDirPath = Path.Combine(chapterFilesPath, "META-INF");
             Directory.CreateDirectory(metaInfDirPath);
             string calibreContainerFile = Path.Combine(metaInfDirPath, "container.xml");
-            using (XmlWriter writer = XmlWriter.Create(File.OpenWrite(calibreContainerFile), writerSettings)) {
+            using (FileStream fileStream = File.OpenWrite(calibreContainerFile))
+            using (XmlWriter writer = XmlWriter.Create(fileStream, writerSettings)) {
                 WriteCalibreContainerFile(writer);
             }
 
             // Now turn it into a ZIP archive (EPUB files are just ZIP archives with a different extension)
             // ZipFile.CreateFromDirectory() has all kinds of weird bugs, so we have to copy new-chapters/ to a temp location first
             // So make the ZIP archive in a temp location and then move it
-            // string tempPath = Path.GetTempPath();
-            // string newChaptersTempPath = Path.Combine(tempPath, chapterFilesPath);
-            // Directory.CreateDirectory(newChaptersTempPath);
-            // string tempZipLocation = Path.GetTempFileName();
-            // if (File.Exists(tempZipLocation)) {
-            //     File.Delete(tempZipLocation);
-            // }
-            // ZipFile.CreateFromDirectory(chapterFilesPath, tempZipLocation);
-            // File.Move(tempZipLocation, outputFile);
+            string tempPath = Path.GetTempPath();
+            string newChaptersTempPath = Path.Combine(tempPath, chapterFilesPath);
+            Directory.CreateDirectory(newChaptersTempPath);
+            string tempZipLocation = Path.GetTempFileName();
+            if (File.Exists(tempZipLocation)) {
+                File.Delete(tempZipLocation);
+            }
+            ZipFile.CreateFromDirectory(chapterFilesPath, tempZipLocation);
+            File.Move(tempZipLocation, outputFile);
         }
 
         /// <summary>
