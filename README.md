@@ -14,6 +14,11 @@ dotnet build
 ```
 4. Run the project
 ```command
-dotnet run -- -d chapterFiles/ -o Meaningness.epub
+dotnet run -- -o Meaningness.epub
 ```
 
+## Note on slowness
+
+You'll notice the download process is a bit slow (about 30 minutes for all 183 chapters). This is because the script honors the Crawl-Delay in Meaningness' robots.txt file and only downloads one file every 10 seconds. You could change this, but consider whether you are being a good web citizen by so doing.
+
+If a run is interrupted, you can resume it where it left off with the `-d chapterFiles/` option, using the folder from the last run.

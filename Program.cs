@@ -35,24 +35,29 @@ namespace MeaningnessScraper {
 
             var options = new OptionSet {
                 {"c|chapterFile=", "The table of contents at meaningness.com. Leave blank to redownload", toc => tocFile = toc },
-                {"d|chapterDirectory=", "The directory to download chapters to. Any that already exist will be skipped", path => chapterFilesPath = path },
+                {"d|chapterDirectory=", "The directory to download chapters to. Any that already exist will be skipped. Leave blank to download to a temp directory that will be cleaned up", path => chapterFilesPath = path },
                 {"f|forceDownload", "Force redownload of chapters that already exist", f => forceDownload = (f != null) },
-                {"o|output=", "The name of the output file. Must end in .epub", output => outputFile = output }
+                {"o|output=", "The name of the output file. Required. Must end in .epub", output => outputFile = output }
             };
 
             var ignored = options.Parse(args);
 
-            if (chapterFilesPath == null) {
-                throw new ArgumentNullException("chapterDirectory", "Must supply a directory to download chapter files to");
-            }
-
             if (outputFile == null || !outputFile.EndsWith(".epub")) {
                 throw new ArgumentException("output is null or in wrong format");
             }
-            
-            if (File.Exists(outputFile)) {
-                File.Delete(outputFile);
+
+            bool usingTempChapterFilesPath = false;
+            if (chapterFilesPath == null) {
+                usingTempChapterFilesPath = true;
+                chapterFilesPath = Path.Combine(Path.GetTempPath(), "meaningness-tmp");
+
+                if (Directory.Exists(chapterFilesPath)) {
+                    Directory.Delete(chapterFilesPath, true);
+                }
+                Directory.CreateDirectory(chapterFilesPath);
             }
+
+            Console.WriteLine($"Downloading files to {chapterFilesPath}...");
 
             // Download chapter list or read existing one from file
             List<Chapter> chapters = GetChapterListAsync(tocFile, chapterFilesPath).Result;
@@ -62,8 +67,11 @@ namespace MeaningnessScraper {
                 DoForAllChapters(chapters, c => DownloadChapterAsync(c, client, chapterFilesPath, forceDownload).Wait());
             }
 
+            Console.Write("Cleaning up HTML files... ");
             // Cleanup chapter files
             DoForAllChapters(chapters, c => CleanChapterFile(c.GetFileName(chapterFilesPath)));
+            
+            Console.Write(" done!\n");
 
             // Write the four metadata files necessary for the EPUB format
             // see http://www.hxa.name/articles/content/epub-guide_hxa7241_2007.html for details
@@ -87,6 +95,7 @@ namespace MeaningnessScraper {
             // container.xml goes in META-INF directory
             string metaInfDirPath = Path.Combine(chapterFilesPath, "META-INF");
             Directory.CreateDirectory(metaInfDirPath);
+
             string calibreContainerFile = Path.Combine(metaInfDirPath, "container.xml");
             using (FileStream fileStream = File.OpenWrite(calibreContainerFile))
             using (XmlWriter writer = XmlWriter.Create(fileStream, writerSettings)) {
@@ -94,17 +103,21 @@ namespace MeaningnessScraper {
             }
 
             // Now turn it into a ZIP archive (EPUB files are just ZIP archives with a different extension)
-            // ZipFile.CreateFromDirectory() has all kinds of weird bugs, so we have to copy new-chapters/ to a temp location first
-            // So make the ZIP archive in a temp location and then move it
-            string tempPath = Path.GetTempPath();
-            string newChaptersTempPath = Path.Combine(tempPath, chapterFilesPath);
-            Directory.CreateDirectory(newChaptersTempPath);
-            string tempZipLocation = Path.GetTempFileName();
-            if (File.Exists(tempZipLocation)) {
-                File.Delete(tempZipLocation);
+            // ZipFile.CreateFromDirectory() has weird bugs if input and output are in the same directory 
+            // So we have to do this with more temp files: make the ZIP archive in a temp location and then move it
+            if (File.Exists(outputFile)) {
+                File.Delete(outputFile);
             }
+
+            Console.Write("Making EPUB file... ");
+            string tempZipLocation = Path.GetTempFileName() + ".zip";
             ZipFile.CreateFromDirectory(chapterFilesPath, tempZipLocation);
             File.Move(tempZipLocation, outputFile);
+            if (usingTempChapterFilesPath) {
+                Directory.Delete(chapterFilesPath, true);
+            }
+
+            Console.Write(" done!\n");
         }
 
         /// <summary>
@@ -121,7 +134,9 @@ namespace MeaningnessScraper {
 
             // Remove FB/Twitter/comment links
             var navBar = article.SelectSingleNode("//nav[@class='clearfix']");
-            article.RemoveChild(navBar);
+            if (navBar != null) {
+                article.RemoveChild(navBar);
+            }
 
             // Add to the new document
             modified.DocumentNode.AppendChild(h1);
@@ -340,7 +355,7 @@ namespace MeaningnessScraper {
                 tocFile = System.IO.Path.GetTempFileName();
                 usingTempFile = true;
 
-                using (HttpClient client = new HttpClient { BaseAddress = new Uri(MeaningnessBaseAddress) }) 
+                using (HttpClient client = GetHttpClient()) 
                 using (Stream httpStream = await client.GetStreamAsync("/")) 
                 using (FileStream fileStream = File.OpenWrite(tocFile)) {
                     await httpStream.CopyToAsync(fileStream);
@@ -359,7 +374,7 @@ namespace MeaningnessScraper {
 
             // Cleanup temp files
             if (usingTempFile) {
-                File.Copy(tocFile, Path.Combine(chapterFilesDir, "meaningness.html"));
+                File.Copy(tocFile, Path.Combine(chapterFilesDir, "meaningness.html"), true);
                 File.Delete(tocFile);
             }
 
@@ -383,6 +398,9 @@ namespace MeaningnessScraper {
 
                 Console.Write($"Currently downloading \"{chapter.Title}\" ..... ");
 
+                // For nested links, need to make sure directory exists or File.OpenWrite() will fail
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+
                 using (Stream httpStream = await client.GetStreamAsync(chapter.Url))
                 using (FileStream fileStream = File.OpenWrite(path)) {
                     await httpStream.CopyToAsync(fileStream);
@@ -395,7 +413,7 @@ namespace MeaningnessScraper {
         }
 
         /// <summary>
-        /// Recursive method for reading the sub-chapters of a given chapter
+        /// Recursive method for reading the sub-chapters of a given chapter from the Meaningness home page TOC
         /// </summary>
         /// <param name="iter">iterator at the current level</param>
         private static List<Chapter> ReadChildChapters(XPathNodeIterator iter) {
