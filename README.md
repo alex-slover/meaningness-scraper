@@ -1,6 +1,6 @@
 # Meaningness EPUB converter
 
-A quick tool to turn David Chapman's [Meaningness](https://meaningness.com) into a read-anywhere* EPUB ebook, in the manner of the existing [Worm](https://github.com/rhelsing/worm_scraper) and [Unsong](https://github.com/JasonGross/unsong_scraper) scrapers.
+A quick tool to turn David Chapman's [Meaningness](https://meaningness.com) into a read-anywhere* EPUB ebook.
 
 \* **Note to Kindle users:** This tool only produces an EPUB file, which by itself will not work on a Kindle. You'll have to convert it to a MOBI file with [Calibre](https://calibre-ebook.com). Note that the Table of Contents does not work after MOBI conversion, since as far as I can tell MOBI TOCs can only be 3 levels deep, and Meaningness' TOC is 9.
 
